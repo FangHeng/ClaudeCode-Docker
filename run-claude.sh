@@ -46,12 +46,23 @@ USERNAME="$(whoami)"
 IMAGE_NAME="claude-code-${USERNAME}:latest"
 WORKSPACE_PATH="$(pwd)"
 
-# Generate container name based on workspace path
-# Take last two path components and create hash
-WORKSPACE_TWO_PARTS=$(echo "$WORKSPACE_PATH" | awk -F'/' '{if(NF>=2) print $(NF-1)"/"$NF; else print $NF}')
-WORKSPACE_SANITIZED=$(echo "$WORKSPACE_TWO_PARTS" | sed 's/[^a-zA-Z0-9_-]/-/g')
-WORKSPACE_HASH=$(echo "$WORKSPACE_PATH" | sha256sum | cut -c1-12)
-CONTAINER_NAME="claude-code-$WORKSPACE_SANITIZED-$WORKSPACE_HASH"
+CONTAINER_NAME_EXPLICIT=false
+
+# Generate a deterministic container name based on workspace path.
+generate_container_name() {
+  local workspace_path="$1"
+  local workspace_two_parts
+  local workspace_sanitized
+  local workspace_hash
+
+  # Take last two path components and create hash.
+  workspace_two_parts=$(echo "$workspace_path" | awk -F'/' '{if(NF>=2) print $(NF-1)"/"$NF; else print $NF}')
+  workspace_sanitized=$(echo "$workspace_two_parts" | sed 's/[^a-zA-Z0-9_-]/-/g')
+  workspace_hash=$(echo "$workspace_path" | sha256sum | cut -c1-12)
+  echo "claude-code-$workspace_sanitized-$workspace_hash"
+}
+
+CONTAINER_NAME="$(generate_container_name "$WORKSPACE_PATH")"
 CLAUDE_CONFIG_PATH="$HOME/.claude"
 INTERACTIVE=true
 REMOVE_CONTAINER=false
@@ -446,6 +457,7 @@ while [[ $# -gt 0 ]]; do
     ;;
   -n | --name)
     CONTAINER_NAME="$2"
+    CONTAINER_NAME_EXPLICIT=true
     shift 2
     ;;
   -i | --image)
@@ -644,6 +656,12 @@ fi
 if [[ ! -d "$WORKSPACE_PATH" ]]; then
   echo -e "${RED}Error: Workspace path does not exist: $WORKSPACE_PATH${NC}"
   exit 1
+fi
+
+# If user did not explicitly set a container name, derive it from the final
+# workspace path after argument parsing.
+if [[ "$CONTAINER_NAME_EXPLICIT" == "false" ]]; then
+  CONTAINER_NAME="$(generate_container_name "$WORKSPACE_PATH")"
 fi
 
 if [[ ! -d "$CLAUDE_CONFIG_PATH" ]]; then
@@ -1007,6 +1025,8 @@ generate_dockerfile_content() {
     "gpg"
     "git-delta"
     "tmux"
+    "locales"
+    "ncurses-term"
   )
 
   # Add extra packages to the list
@@ -1034,6 +1054,11 @@ generate_dockerfile_content() {
 # Stage 1: Base tools and development environment
 # ============================================================================
 FROM __RUN_CLAUDE_BASE_IMAGE__ AS base-tools
+
+# Ensure UTF-8 locale for TUI rendering.
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV LANGUAGE=C.UTF-8
 
 # Install system dependencies including zsh and tools
 # LazyVim requires Neovim >= 0.11.2, so install Neovim from unstable PPA.
@@ -1148,6 +1173,11 @@ case "$TERM" in
     export TERM=xterm-256color
     ;;
 esac
+
+# Ensure UTF-8 locale in runtime shell.
+export LANG="${LANG:-C.UTF-8}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+export LANGUAGE="${LANGUAGE:-C.UTF-8}"
 
 # Merge Claude config from host file if available
 if [ -f "$HOME/.claude.host.json" ]; then
@@ -1279,6 +1309,11 @@ case "$TERM" in
     ;;
 esac
 
+# Ensure UTF-8 locale for interactive shell sessions.
+export LANG="${LANG:-C.UTF-8}"
+export LC_ALL="${LC_ALL:-C.UTF-8}"
+export LANGUAGE="${LANGUAGE:-C.UTF-8}"
+
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="robbyrussell"
 plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
@@ -1308,6 +1343,14 @@ alias vi="nvim"
 
 # Git SSH configuration
 export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR"
+EOF
+
+# Configure tmux defaults for better TUI compatibility.
+RUN cat > ~/.tmux.conf << 'EOF'
+set -g default-terminal "tmux-256color"
+set -ga terminal-overrides ",xterm-256color:RGB"
+set -ga terminal-overrides ",tmux-256color:RGB"
+set -g mouse on
 EOF
 
 ENTRYPOINT ["/entrypoint.sh"]
