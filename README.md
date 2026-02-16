@@ -1,5 +1,7 @@
 # Claude Code Docker Runner 文档
 
+> 本项目文档仍不完善，有任何问题或建议，请随时提出。
+
 ## 1. 概述
 
 本项目使用 Docker 运行 Claude Code，并提供三个脚本入口：
@@ -178,3 +180,8 @@ ssh-keygen -t ed25519 -f /path/to/repo/.ssh/Claude -C "ClaudeCode"
 ./claude.sh command -v ccline
 ./claude.sh ls -l ~/.claude/ccline/ccline
 ```
+
+## 9. 致谢
+
+本项目参考了 [run-claude-docker](https://github.com/icanhasjonas/run-claude-docker) 项目，并在此基础上进行了修改和优化。
+使用[Claude Code](https://www.anthropic.com/docs/claude-code) 和[CCometixLine](https://github.com/Haleclipse/CCometixLine) 提供强大的AI能力。
