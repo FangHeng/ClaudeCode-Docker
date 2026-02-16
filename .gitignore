@@ -1,0 +1,8 @@
+.DS_Store
+
+# Keep workspace-local SSH directory, ignore sensitive contents.
+.ssh/*
+!.ssh/.gitkeep
+
+# Local secrets/bootstrap script (do not commit).
+cc.sh
