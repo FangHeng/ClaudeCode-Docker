@@ -1006,6 +1006,7 @@ generate_dockerfile_content() {
     "fd-find"
     "gpg"
     "git-delta"
+    "tmux"
   )
 
   # Add extra packages to the list
@@ -1140,6 +1141,14 @@ USER root
 RUN cat > /entrypoint.sh << 'EOF'
 #!/bin/sh
 
+# Fix TERM for TUI (Claude logo/box-drawing) when running inside tmux/screen.
+# Otherwise many TUIs render "---" instead of Unicode box-drawing characters.
+case "$TERM" in
+  tmux|tmux-256color|screen|screen-256color)
+    export TERM=xterm-256color
+    ;;
+esac
+
 # Merge Claude config from host file if available
 if [ -f "$HOME/.claude.host.json" ]; then
   CONFIG_KEYS="oauthAccount hasSeenTasksHint userID hasCompletedOnboarding lastOnboardingVersion subscriptionNoticeCount hasAvailableSubscription s1mAccessCache"
@@ -1263,6 +1272,13 @@ WORKDIR /home/$USERNAME
 
 # Configure zsh with theme, plugins, and aliases
 RUN cat > ~/.zshrc << 'EOF'
+# Fix TERM in tmux/screen so TUI (e.g. Claude logo) renders correctly instead of "---"
+case "$TERM" in
+  tmux|tmux-256color|screen|screen-256color)
+    export TERM=xterm-256color
+    ;;
+esac
+
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="robbyrussell"
 plugins=(git zsh-autosuggestions zsh-syntax-highlighting)
@@ -1482,7 +1498,22 @@ handle_existing_container() {
           echo -e "${MAGENTA}Then execute: ${BRIGHT_CYAN}$EXEC_CMD${NC}"
           echo -e "${MAGENTA}With args: ${BRIGHT_CYAN}$*${NC}"
         else
-          echo -e "${MAGENTA}Would execute: ${BRIGHT_CYAN}docker start -i $CONTAINER_NAME${NC}"
+          echo -e "${MAGENTA}Would execute: ${BRIGHT_CYAN}docker start $CONTAINER_NAME${NC}"
+          EXEC_CMD="docker exec -it"
+          if [[ ${#PASSTHROUGH_ARGS[@]} -gt 0 ]]; then
+            for arg in "${PASSTHROUGH_ARGS[@]}"; do
+              EXEC_CMD="$EXEC_CMD $arg"
+            done
+          fi
+
+          # Add forwarded environment variables
+          FORWARDED_ENV_FLAGS=$(generate_forwarded_variables)
+          if [[ -n "$FORWARDED_ENV_FLAGS" ]]; then
+            EXEC_CMD="$EXEC_CMD$FORWARDED_ENV_FLAGS"
+          fi
+
+          EXEC_CMD="$EXEC_CMD $CONTAINER_NAME /usr/local/bin/claude-exec"
+          echo -e "${MAGENTA}Then execute: ${BRIGHT_CYAN}$EXEC_CMD${NC}"
         fi
         echo -e "${GREEN}Dry run complete - would have started and executed commands.${NC}"
         exit 0
@@ -1508,8 +1539,23 @@ handle_existing_container() {
         EXEC_CMD="$EXEC_CMD $CONTAINER_NAME /usr/local/bin/claude-exec"
         exec $EXEC_CMD "$@"
       else
-        # Start container interactively
-        exec docker start -i "$CONTAINER_NAME"
+        # Start container, then exec into it so forwarded env vars are applied.
+        docker start "$CONTAINER_NAME" >/dev/null
+        EXEC_CMD="docker exec -it"
+        if [[ ${#PASSTHROUGH_ARGS[@]} -gt 0 ]]; then
+          for arg in "${PASSTHROUGH_ARGS[@]}"; do
+            EXEC_CMD="$EXEC_CMD $arg"
+          done
+        fi
+
+        # Add forwarded environment variables
+        FORWARDED_ENV_FLAGS=$(generate_forwarded_variables)
+        if [[ -n "$FORWARDED_ENV_FLAGS" ]]; then
+          EXEC_CMD="$EXEC_CMD$FORWARDED_ENV_FLAGS"
+        fi
+
+        EXEC_CMD="$EXEC_CMD $CONTAINER_NAME /usr/local/bin/claude-exec"
+        exec $EXEC_CMD
       fi
     fi
   fi
