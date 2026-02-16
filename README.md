@@ -178,17 +178,3 @@ ssh-keygen -t ed25519 -f /path/to/repo/.ssh/Claude -C "ClaudeCode"
 ./claude.sh command -v ccline
 ./claude.sh ls -l ~/.claude/ccline/ccline
 ```
-
-## 9. 安全与隔离策略
-
-- 不挂载宿主机 `~/.ssh`。
-- 仅挂载工作目录下 `.ssh` 到容器（只读）。
-- 建议仅放置最小权限 SSH 凭证，并设置目录权限：
-
-```bash
-chmod 700 ./.ssh
-```
-
-## 10. 参考
-
-- CCometixLine: <https://github.com/Haleclipse/CCometixLine>

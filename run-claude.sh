@@ -1035,8 +1035,13 @@ generate_dockerfile_content() {
 FROM __RUN_CLAUDE_BASE_IMAGE__ AS base-tools
 
 # Install system dependencies including zsh and tools
-# Add retries to reduce transient mirror/network failures.
-RUN apt-get update && apt-get install -y --no-install-recommends -o Acquire::Retries=5 \
+# LazyVim requires Neovim >= 0.11.2, so install Neovim from unstable PPA.
+# Keep retries enabled to reduce transient mirror/network failures.
+RUN apt-get update \
+	&& DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -o Acquire::Retries=5 software-properties-common \
+	&& add-apt-repository -y ppa:neovim-ppa/unstable \
+	&& apt-get update \
+	&& DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -o Acquire::Retries=5 \
 DOCKERFILE_EOF
 
   # Insert the dynamic package list
