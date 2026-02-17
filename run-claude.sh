@@ -65,7 +65,7 @@ generate_container_name() {
 CONTAINER_NAME="$(generate_container_name "$WORKSPACE_PATH")"
 CLAUDE_CONFIG_PATH="$HOME/.claude"
 INTERACTIVE=true
-REMOVE_CONTAINER=false
+REMOVE_CONTAINER=true
 PRIVILEGED=true
 DANGEROUS_MODE=true
 BUILD_ONLY=false
@@ -244,7 +244,7 @@ _run_claude_completion() {
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
     
-    opts="-w --workspace -c --claude-config -n --name -i --image --rm --no-interactive --no-privileged --safe --no-gpg --gpg --build --rebuild --recreate --verbose --remove-containers --force-remove-all-containers --export-dockerfile --push-to --generate-completions --username --extra-package -E --forward-variable --aws -h --help"
+    opts="-w --workspace -c --claude-config -n --name -i --image --rm --no-rm --no-interactive --no-privileged --safe --no-gpg --gpg --build --rebuild --recreate --verbose --remove-containers --force-remove-all-containers --export-dockerfile --push-to --generate-completions --username --extra-package -E --forward-variable --aws -h --help"
     
     case "${prev}" in
         -w|--workspace)
@@ -311,6 +311,7 @@ _run_claude_zsh_completion() {
         '-i[Set image name]:image:'
         '--image[Set image name]:image:'
         '--rm[Remove container after exit]'
+        '--no-rm[Keep container after exit (persistent)]'
         '--no-interactive[Run in non-interactive mode]'
         '--no-privileged[Run without privileged mode]'
         '--safe[Disable dangerous permissions]'
@@ -352,7 +353,8 @@ usage() {
   echo "  -c, --claude-config PATH Set Claude config path (default: ~/.claude)"
   echo "  -n, --name NAME         Set container name"
   echo "  -i, --image NAME        Set image name (default: claude-code:latest)"
-  echo "  --rm                    Remove container after exit (default: persistent)"
+  echo "  --rm                    Remove container after exit (default)"
+  echo "  --no-rm                 Keep container after exit (persistent)"
   echo "  --no-interactive        Run in non-interactive mode"
   echo "  --no-privileged         Run without privileged mode"
   echo "  --safe                  Disable dangerous permissions"
@@ -466,6 +468,10 @@ while [[ $# -gt 0 ]]; do
     ;;
   --rm)
     REMOVE_CONTAINER=true
+    shift
+    ;;
+  --no-rm)
+    REMOVE_CONTAINER=false
     shift
     ;;
   --no-interactive)
@@ -1564,7 +1570,15 @@ handle_existing_container() {
 
       if [[ $# -gt 0 ]]; then
         # Start container and then execute command in it
-        docker start "$CONTAINER_NAME" >/dev/null
+        if ! docker start "$CONTAINER_NAME" 2>&1; then
+          echo ""
+          echo -e "${RED}Failed to start container. This often happens when host paths (e.g. SSH agent socket) have changed since the container was created.${NC}"
+          echo -e "${YELLOW}Remove the existing container and create a new one:${NC}"
+          echo -e "${BRIGHT_CYAN}  $(basename $0) --recreate $*${NC}"
+          echo -e "${YELLOW}Or remove all stopped containers:${NC}"
+          echo -e "${BRIGHT_CYAN}  $(basename $0) --remove-containers${NC}"
+          exit 1
+        fi
         # Build docker exec command with passthrough args and environment variables
         EXEC_CMD="docker exec -it"
         if [[ ${#PASSTHROUGH_ARGS[@]} -gt 0 ]]; then
@@ -1583,7 +1597,15 @@ handle_existing_container() {
         exec $EXEC_CMD "$@"
       else
         # Start container, then exec into it so forwarded env vars are applied.
-        docker start "$CONTAINER_NAME" >/dev/null
+        if ! docker start "$CONTAINER_NAME" 2>&1; then
+          echo ""
+          echo -e "${RED}Failed to start container. This often happens when host paths (e.g. SSH agent socket) have changed since the container was created.${NC}"
+          echo -e "${YELLOW}Remove the existing container and create a new one:${NC}"
+          echo -e "${BRIGHT_CYAN}  $(basename $0) --recreate${NC}"
+          echo -e "${YELLOW}Or remove all stopped containers:${NC}"
+          echo -e "${BRIGHT_CYAN}  $(basename $0) --remove-containers${NC}"
+          exit 1
+        fi
         EXEC_CMD="docker exec -it"
         if [[ ${#PASSTHROUGH_ARGS[@]} -gt 0 ]]; then
           for arg in "${PASSTHROUGH_ARGS[@]}"; do
