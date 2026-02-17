@@ -746,13 +746,22 @@ DOCKER_CMD="$DOCKER_CMD \
 	-v $WORKSPACE_PATH:/home/$USERNAME/$WORKSPACE_BASENAME"
 
 # Add optional read-only mounts if they exist
-# Permission isolation: only mount workspace-local .ssh, never host ~/.ssh
-LOCAL_SSH_PATH="$WORKSPACE_PATH/.ssh"
-if [[ -d "$LOCAL_SSH_PATH" ]]; then
+# Permission isolation: only mount workspace-local .ssh or script-local .ssh, never host ~/.ssh
+# Priority: 1) Workspace .ssh, 2) Script directory .ssh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOCAL_SSH_PATH=""
+
+if [[ -d "$WORKSPACE_PATH/.ssh" ]]; then
+  LOCAL_SSH_PATH="$WORKSPACE_PATH/.ssh"
+elif [[ -d "$SCRIPT_DIR/.ssh" ]]; then
+  LOCAL_SSH_PATH="$SCRIPT_DIR/.ssh"
+fi
+
+if [[ -n "$LOCAL_SSH_PATH" ]]; then
   DOCKER_CMD="$DOCKER_CMD \
 	-v $LOCAL_SSH_PATH:/home/$USERNAME/.ssh:ro"
   if [[ "$VERBOSE" == "true" ]]; then
-    echo -e "${MAGENTA}Workspace-local SSH directory detected and will be mounted: ${BRIGHT_CYAN}$LOCAL_SSH_PATH${NC}"
+    echo -e "${MAGENTA}SSH directory detected and will be mounted: ${BRIGHT_CYAN}$LOCAL_SSH_PATH${NC}"
   fi
 fi
 
@@ -1014,6 +1023,7 @@ generate_dockerfile_content() {
     "curl"
     "wget"
     "git"
+    "openssh-client"
     "python3"
     "unzip"
     "python3-pip"
