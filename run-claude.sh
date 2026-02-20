@@ -1296,6 +1296,23 @@ if [ -n "$WORKSPACE_PATH" ] && [ -d "$WORKSPACE_PATH/.agent" ]; then
   fi
 fi
 
+# If workspace mounts a .agents directory, expose it as ~/.agents.
+if [ -n "$WORKSPACE_PATH" ] && [ -d "$WORKSPACE_PATH/.agents" ]; then
+  if [ -L "$HOME/.agents" ]; then
+    ln -sfn "$WORKSPACE_PATH/.agents" "$HOME/.agents"
+  elif [ -e "$HOME/.agents" ]; then
+    if [ "$RUN_CLAUDE_VERBOSE" = "1" ]; then
+      echo "Warning: $HOME/.agents exists and is not a symlink; skip linking"
+    fi
+  else
+    ln -s "$WORKSPACE_PATH/.agents" "$HOME/.agents"
+  fi
+
+  if [ "$RUN_CLAUDE_VERBOSE" = "1" ]; then
+    echo "Linked $HOME/.agents -> $WORKSPACE_PATH/.agents"
+  fi
+fi
+
 # Change to workspace directory if provided
 if [ -n "$WORKSPACE_PATH" ] && [ -d "$WORKSPACE_PATH" ]; then
   cd "$WORKSPACE_PATH"
