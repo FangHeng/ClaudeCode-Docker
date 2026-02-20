@@ -1279,6 +1279,23 @@ if [ -S "/gpg-agent-extra" ]; then
   fi
 fi
 
+# If workspace mounts a .agent directory, expose it as ~/.agent.
+if [ -n "$WORKSPACE_PATH" ] && [ -d "$WORKSPACE_PATH/.agent" ]; then
+  if [ -L "$HOME/.agent" ]; then
+    ln -sfn "$WORKSPACE_PATH/.agent" "$HOME/.agent"
+  elif [ -e "$HOME/.agent" ]; then
+    if [ "$RUN_CLAUDE_VERBOSE" = "1" ]; then
+      echo "Warning: $HOME/.agent exists and is not a symlink; skip linking"
+    fi
+  else
+    ln -s "$WORKSPACE_PATH/.agent" "$HOME/.agent"
+  fi
+
+  if [ "$RUN_CLAUDE_VERBOSE" = "1" ]; then
+    echo "Linked $HOME/.agent -> $WORKSPACE_PATH/.agent"
+  fi
+fi
+
 # Change to workspace directory if provided
 if [ -n "$WORKSPACE_PATH" ] && [ -d "$WORKSPACE_PATH" ]; then
   cd "$WORKSPACE_PATH"
