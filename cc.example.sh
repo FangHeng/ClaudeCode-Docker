@@ -23,6 +23,9 @@ export HTTPS_PROXY="${HTTPS_PROXY:-$CLASH_HTTP_PROXY}"
 export ALL_PROXY="${ALL_PROXY:-$CLASH_SOCKS_PROXY}"
 export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,::1,host.docker.internal}"
 
+# Other packages to install
+export RUN_CLAUDE_EXTRA_PACKAGES="${RUN_CLAUDE_EXTRA_PACKAGES:-xxxx}"
+
 # Ensure workspace-local SSH directory exists for read-only mount.
 if [[ ! -d "$SCRIPT_DIR/.ssh" ]]; then
   mkdir -p "$SCRIPT_DIR/.ssh"
@@ -39,4 +42,5 @@ exec "$RUNNER_SCRIPT" \
   -E HTTPS_PROXY \
   -E ALL_PROXY \
   -E NO_PROXY \
+  -E RUN_CLAUDE_EXTRA_PACKAGES \
   "$@"
