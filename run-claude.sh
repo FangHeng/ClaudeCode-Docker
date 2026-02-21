@@ -866,14 +866,14 @@ build_image() {
 
   # Build the image
   if [[ "$DRY_RUN" == "true" ]]; then
-    echo -e "${MAGENTA}Would execute: ${BRIGHT_CYAN}docker build --build-arg USERNAME=\"$USERNAME\"$PROXY_BUILD_ARGS -t \"$IMAGE_NAME\" \"$TEMP_DIR\"${NC}"
+    echo -e "${MAGENTA}Would execute: ${BRIGHT_CYAN}DOCKER_BUILDKIT=1 docker build --build-arg USERNAME=\"$USERNAME\"$PROXY_BUILD_ARGS -t \"$IMAGE_NAME\" \"$TEMP_DIR\"${NC}"
     echo -e "${GREEN}Dry run complete - would have built Docker image.${NC}"
     return 0
   fi
 
   local build_attempt=1
   while (( build_attempt <= BUILD_RETRY_COUNT )); do
-    if docker build --build-arg USERNAME="$USERNAME" $PROXY_BUILD_ARGS -t "$IMAGE_NAME" "$TEMP_DIR"; then
+    if DOCKER_BUILDKIT=1 docker build --build-arg USERNAME="$USERNAME" $PROXY_BUILD_ARGS -t "$IMAGE_NAME" "$TEMP_DIR"; then
       echo -e "${MAGENTA}Successfully built ${BRIGHT_CYAN}$IMAGE_NAME${NC}"
       return 0
     fi
@@ -1078,12 +1078,16 @@ ENV LANGUAGE=C.UTF-8
 
 # Install system dependencies including zsh and tools
 # LazyVim requires Neovim >= 0.11.2, so install Neovim from unstable PPA.
-# Keep retries enabled to reduce transient mirror/network failures.
-RUN apt-get update \
-	&& DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -o Acquire::Retries=5 software-properties-common \
+# Keep retries enabled to reduce transient mirror/network/proxy failures.
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+	&& echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache \
+	&& apt-get update -o Acquire::Retries=5 \
+	&& DEBIAN_FRONTEND=noninteractive apt-get install -y --fix-missing -o Acquire::Retries=10 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 software-properties-common \
 	&& add-apt-repository -y ppa:neovim-ppa/unstable \
-	&& apt-get update \
-	&& DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -o Acquire::Retries=5 \
+	&& apt-get update -o Acquire::Retries=5 \
+	&& DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --fix-missing -o Acquire::Retries=10 -o Acquire::http::Timeout=60 -o Acquire::https::Timeout=60 \
 DOCKERFILE_EOF
 
   # Insert the dynamic package list
@@ -1091,8 +1095,9 @@ DOCKERFILE_EOF
 
   cat <<'DOCKERFILE_EOF'
 
-# Clean up apt cache
-RUN rm -rf /var/lib/apt/lists/*
+# Note: BuildKit cache mounts keep the apt cache intact, but if it fails,
+# we still might want to remove /var/lib/apt/lists in a separate RUN step if not using mounts.
+# We skip aggressive cleanups to leverage BuildKit caching fully.
 
 # Install Go
 RUN ARCH=$(dpkg --print-architecture) && \
@@ -1423,7 +1428,7 @@ export_dockerfile() {
   generate_dockerfile_content >"$OUTPUT_FILE"
 
   echo -e "${MAGENTA}Dockerfile exported successfully!${NC}"
-  echo -e "${YELLOW}To build: docker build --build-arg USERNAME=claude-user -t your-image-name .${NC}"
+  echo -e "${YELLOW}To build: DOCKER_BUILDKIT=1 docker build --build-arg USERNAME=claude-user -t your-image-name .${NC}"
 }
 
 # Function to push image to repository
